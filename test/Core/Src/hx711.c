@@ -1,4 +1,5 @@
 #include <hx711.h>
+#include "main.h"
 
 //#############################################################################################
 void hx711_init(hx711_t *hx711, GPIO_TypeDef *clk_gpio, uint16_t clk_pin, GPIO_TypeDef *dat_gpio, uint16_t dat_pin){
@@ -44,19 +45,19 @@ uint8_t shiftIn(hx711_t *hx711, uint8_t bitOrder) {
     uint8_t i;
 
     for(i = 0; i < 8; ++i) {
-    	HAL_GPIO_WritePin(hx711->clk_gpio, hx711->clk_pin, GPIO_PIN_SET);
+    	HAL_GPIO_WritePin(HX_SCK_GPIO_Port, HX_SCK_Pin, GPIO_PIN_SET);
         if(bitOrder == 0)
-            value |= HAL_GPIO_ReadPin(hx711->dat_gpio, hx711->dat_pin) << i;
+            value |= HAL_GPIO_ReadPin(HX_DT_GPIO_Port, HX_DT_Pin) << i;
         else
-            value |= HAL_GPIO_ReadPin(hx711->dat_gpio, hx711->dat_pin) << (7 - i);
-        HAL_GPIO_WritePin(hx711->clk_gpio, hx711->clk_pin, GPIO_PIN_RESET);
+            value |= HAL_GPIO_ReadPin(HX_DT_GPIO_Port, HX_DT_Pin) << (7 - i);
+        HAL_GPIO_WritePin(HX_SCK_GPIO_Port, HX_SCK_Pin, GPIO_PIN_RESET);
     }
     return value;
 }
 
 //############################################################################################
 bool is_ready(hx711_t *hx711) {
-	if(HAL_GPIO_ReadPin(hx711->dat_gpio, hx711->dat_pin) == GPIO_PIN_RESET){
+	if(HAL_GPIO_ReadPin(HX_DT_GPIO_Port, HX_DT_Pin) == GPIO_PIN_RESET){
 		return 1;
 	}
 	return 0;
@@ -73,6 +74,8 @@ void wait_ready(hx711_t *hx711) {
 //############################################################################################
 long read(hx711_t *hx711, uint8_t channel){
 	wait_ready(hx711);
+
+
 	unsigned long value = 0;
 	uint8_t data[3] = { 0 };
 	uint8_t filler = 0x00;
@@ -88,8 +91,8 @@ long read(hx711_t *hx711, uint8_t channel){
 	else gain = hx711->Bgain;
 
 	for (unsigned int i = 0; i < gain; i++) {
-		HAL_GPIO_WritePin(hx711->clk_gpio, hx711->clk_pin, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(hx711->clk_gpio, hx711->clk_pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(HX_SCK_GPIO_Port, HX_SCK_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(HX_SCK_GPIO_Port, HX_SCK_Pin, GPIO_PIN_RESET);
 	}
 
 	interrupts();
@@ -103,16 +106,18 @@ long read(hx711_t *hx711, uint8_t channel){
 
 	// Construct a 32-bit signed integer
 	value = ( (unsigned long)(filler) << 24
-			| (unsigned long)(data[2]) << 16
-			| (unsigned long)(data[1]) << 8
-			| (unsigned long)(data[0]) );
+				| (unsigned long)(data[2]) << 16
+				| (unsigned long)(data[1]) << 8
+				| (unsigned long)(data[0]) );
 
-	return (long)(value);
+		return (long)(value);
 }
 
 //############################################################################################
-long read_average(hx711_t *hx711, int8_t times, uint8_t channel) {
-	long sum = 0;
+long  read_average(hx711_t *hx711, int8_t times, uint8_t channel) {
+
+	long  sum = 0.0f;
+
 	for (int8_t i = 0; i < times; i++) {
 		sum += read(hx711, channel);
 		HAL_Delay(0);
@@ -122,31 +127,31 @@ long read_average(hx711_t *hx711, int8_t times, uint8_t channel) {
 
 //############################################################################################
 double get_value(hx711_t *hx711, int8_t times, uint8_t channel) {
-	long offset = 0;
-	if(channel == CHANNEL_A) offset = hx711->Aoffset;
-	else offset = hx711->Boffset;
-	return read_average(hx711, times, channel) - offset;
+
+	long offset = (channel == CHANNEL_A) ? hx711->Aoffset : hx711->Boffset;
+	    long avg = read_average(hx711, times, channel);
+	    return avg - offset;
+
 }
 
 //############################################################################################
 void tare(hx711_t *hx711, uint8_t times, uint8_t channel) {
-	read(hx711, channel); // Change channel
-	double sum = read_average(hx711, times, channel);
+	float sum = read_average(hx711, times, channel);
 	set_offset(hx711, sum, channel);
 }
 
 //############################################################################################
 void tare_all(hx711_t *hx711, uint8_t times) {
 	tare(hx711, times, CHANNEL_A);
-	tare(hx711, times, CHANNEL_B);
 }
 
 //############################################################################################
 float get_weight(hx711_t *hx711, int8_t times, uint8_t channel) {
   // Read load cell
 	read(hx711, channel);
-	float scale = 0;
-	if(channel == CHANNEL_A) scale = hx711->Ascale;
-	else scale = hx711->Bscale;
+	float scale = (channel == CHANNEL_A) ? hx711->Ascale : hx711->Bscale;
+	    if (scale == 0.0f) {
+	        return 0.0f;  // or some error indicator
+	    }
 	return get_value(hx711, times, channel) / scale;
 }

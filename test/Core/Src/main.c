@@ -44,9 +44,13 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-hx711_t * hx711;
+static hx711_t hx711_instance;
+hx711_t *hx711 = &hx711_instance;
 float result;
 char buffer[128] = {0};
+float average = 0;
+float sum = 0.0f;
+uint32_t measurement_count = 0;
 
 /* USER CODE END PV */
 
@@ -66,37 +70,36 @@ static void MX_USART2_UART_Init(void);
 void init_weight(hx711_t *hx711){
 
 
-	sprintf(buffer,"HX711 initialization\n\r");
-	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), sizeof(buffer), 100);
+	int len = sprintf(buffer,"HX711 initialization\n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), len, 100);
 
 	/* Initialize the hx711 sensors */
-	hx711_init(hx711, GPIOC, GPIO_PIN_12, GPIOC, GPIO_PIN_10);
+	hx711_init(hx711, HX_SCK_GPIO_Port, HX_SCK_Pin, HX_DT_GPIO_Port, HX_DT_Pin);
 
 	/* Configure gain for each channel (see datasheet for details) */
-	set_gain(hx711, 128, 32);
+	set_gain(hx711, 64, 32);
 
 	/* Set HX711 scaling factor (see README for procedure) */
-	set_scale(hx711, -44.25, -10.98);
+	set_scale(hx711, -1.017, -10.98);
+	set_offset(hx711, -39878.57, CHANNEL_A);
 
-	/* Tare weight */
-	//tare_all(hx711, 10);
 
-	sprintf(buffer,"HX711 module has been initialized\n\r");
-	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), sizeof(buffer), 100);
+	len = sprintf(buffer,"HX711 module has been initialized\n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), len, 100);
 }
 
 
-float measure_weight(hx711_t * hx711){
-	long weightA = 0;
 
-	// Measure the weight for channel A
-	weightA = get_weight(hx711, 10, CHANNEL_A);
-	// Weight cannot be negative
-	weightA = (weightA < 0) ? 0 : weightA;
 
-	return weightA;
+int __io_putchar(int ch)
+{
+    if (ch == '\n') {
+        uint8_t ch2 = '\r';
+        HAL_UART_Transmit(&huart2, &ch2, 1, HAL_MAX_DELAY);
+    }
+    HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
+    return 1;
 }
-
 
 
 /* USER CODE END 0 */
@@ -141,10 +144,21 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  result = measure_weight(hx711);
-	  int length = sprintf(buffer, "%.2f", result);
-	  HAL_UART_Transmit(&huart2, (uint8_t *)buffer, length, HAL_MAX_DELAY);
-	  HAL_Delay(3000);
+	  result = get_weight(hx711, 10, CHANNEL_A);;
+
+
+	  measurement_count++;
+	      sum += result;
+	      average = sum / (float)measurement_count;
+
+	      printf("Wynik pomiaru: %.2f\r\n", result);
+	      HAL_Delay(400);
+
+	      printf("Srednia: %.2f\r\n", average);
+	      HAL_Delay(400);
+
+	      printf("Numer pomiarow: %lu\r\n", (unsigned long)measurement_count);
+	      HAL_Delay(400);
 
 
 

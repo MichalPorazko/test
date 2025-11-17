@@ -16,10 +16,10 @@ typedef struct
   GPIO_TypeDef  *dat_gpio;
   uint16_t      clk_pin;
   uint16_t      dat_pin;
-  long       	Aoffset;
+  long        	Aoffset;
   float         Ascale;
   uint8_t		Again;
-  long       	Boffset;
+  long        	Boffset;
   float         Bscale;
   uint8_t		Bgain;
 
@@ -41,5 +41,5 @@ uint8_t shiftIn(hx711_t *hx711, uint8_t bit_count);
 bool is_ready(hx711_t *hx711);
 void wait_ready(hx711_t *hx711);
 long read(hx711_t *hx711, uint8_t channel);
-long read_average(hx711_t *hx711, int8_t times, uint8_t channel);
+long  read_average(hx711_t *hx711, int8_t times, uint8_t channel);
 double get_value(hx711_t *hx711, int8_t times, uint8_t channel);
