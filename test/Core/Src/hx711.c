@@ -1,5 +1,6 @@
 #include <hx711.h>
 #include "main.h"
+#include "stm32l4xx_ll_exti.h"
 
 //#############################################################################################
 void hx711_init(hx711_t *hx711, GPIO_TypeDef *clk_gpio, uint16_t clk_pin, GPIO_TypeDef *dat_gpio, uint16_t dat_pin){
@@ -73,7 +74,6 @@ void wait_ready(hx711_t *hx711) {
 
 //############################################################################################
 long read(hx711_t *hx711, uint8_t channel){
-	wait_ready(hx711);
 
 
 	unsigned long value = 0;
@@ -120,7 +120,6 @@ long  read_average(hx711_t *hx711, int8_t times, uint8_t channel) {
 
 	for (int8_t i = 0; i < times; i++) {
 		sum += read(hx711, channel);
-		HAL_Delay(0);
 	}
 	return sum / times;
 }
@@ -147,8 +146,9 @@ void tare_all(hx711_t *hx711, uint8_t times) {
 
 //############################################################################################
 float get_weight(hx711_t *hx711, int8_t times, uint8_t channel) {
-  // Read load cell
-	read(hx711, channel);
+
+	LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_12);
+
 	float scale = (channel == CHANNEL_A) ? hx711->Ascale : hx711->Bscale;
 	    if (scale == 0.0f) {
 	        return 0.0f;  // or some error indicator

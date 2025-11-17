@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "hx711.h"
 #include <stdio.h>
+#include "stm32l4xx_ll_exti.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,6 +52,7 @@ char buffer[128] = {0};
 float average = 0;
 float sum = 0.0f;
 uint32_t measurement_count = 0;
+uint8_t ready = 0;
 
 /* USER CODE END PV */
 
@@ -69,7 +71,6 @@ static void MX_USART2_UART_Init(void);
 
 void init_weight(hx711_t *hx711){
 
-
 	int len = sprintf(buffer,"HX711 initialization\n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), len, 100);
 
@@ -80,16 +81,25 @@ void init_weight(hx711_t *hx711){
 	set_gain(hx711, 64, 32);
 
 	/* Set HX711 scaling factor (see README for procedure) */
-	set_scale(hx711, -1.017, -10.98);
-	set_offset(hx711, -39878.57, CHANNEL_A);
+	set_scale(hx711, 1, -10.98);
 
 
 	len = sprintf(buffer,"HX711 module has been initialized\n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t *)(buffer), len, 100);
+
+	LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_12);
 }
 
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
 
+	if (GPIO_Pin == HX_DT_Pin){
+
+		result = get_weight(hx711, 10, CHANNEL_A);
+		ready = 1;
+	}
+}
 
 int __io_putchar(int ch)
 {
@@ -99,6 +109,17 @@ int __io_putchar(int ch)
     }
     HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
     return 1;
+}
+
+void enable_HX_DT(void){
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = HX_DT_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(HX_DT_GPIO_Port, &GPIO_InitStruct);
+
+	HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 }
 
 
@@ -138,27 +159,38 @@ int main(void)
 
   init_weight(hx711);
 
+  enable_HX_DT();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  result = get_weight(hx711, 10, CHANNEL_A);;
+	  if (ready){
+
+		  measurement_count++;
+		  	      sum += result;
+		  	      average = sum / (float)measurement_count;
+
+		  	      printf("Wynik pomiaru: %.2f\r\n", result);
+		  	      HAL_Delay(400);
+
+		  	      printf("Srednia: %.2f\r\n", average);
+		  	      HAL_Delay(400);
+
+		  	      printf("Numer pomiarow: %lu\r\n", (unsigned long)measurement_count);
+		  	      HAL_Delay(400);
+		  	 ready = 0;
+		  	LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_12);
+
+	  }
 
 
-	  measurement_count++;
-	      sum += result;
-	      average = sum / (float)measurement_count;
 
-	      printf("Wynik pomiaru: %.2f\r\n", result);
-	      HAL_Delay(400);
 
-	      printf("Srednia: %.2f\r\n", average);
-	      HAL_Delay(400);
 
-	      printf("Numer pomiarow: %lu\r\n", (unsigned long)measurement_count);
-	      HAL_Delay(400);
+
 
 
 
@@ -272,7 +304,6 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, LD2_Pin|HX_SCK_Pin, GPIO_PIN_RESET);
@@ -284,29 +315,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : USER_BUTTON_Pin */
-  GPIO_InitStruct.Pin = USER_BUTTON_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(USER_BUTTON_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pin : HX_SCK_Pin */
   GPIO_InitStruct.Pin = HX_SCK_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(HX_SCK_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : HX_DT_Pin */
-  GPIO_InitStruct.Pin = HX_DT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(HX_DT_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
